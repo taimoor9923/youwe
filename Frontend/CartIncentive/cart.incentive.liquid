@@ -1,0 +1,454 @@
+{% comment %}
+  Thresholds Snippet: Displays threshold progress and adds free products to the cart when thresholds are met.
+  Assumptions:
+  - Threshold values are input in dollars in the theme settings.
+  - Cart total price (`cart.total_price`) is in cents.
+{% endcomment %}
+{% layout none %}
+
+<div class="cart-incentive-bar">
+  {%- assign free_shipping_threshold = settings.free_shipping_threshold | times: 100 -%}
+  {%- assign free_product_threshold_1_value = settings.free_product_threshold_1_value | times: 100 -%}
+  {%- assign free_product_threshold_1_product = settings.free_product_threshold_1_product -%}
+  {%- assign free_product_threshold_2_value = settings.free_product_threshold_2_value | times: 100 -%}
+  {%- assign free_product_threshold_2_product = settings.free_product_threshold_2_product -%}
+
+  {%- assign cart_total = cart.total_price -%}
+
+  {%- assign show_third_threshold = false -%}
+  {%- for item in cart.items -%}
+    {%- for collection in item.product.collections -%}
+      {%- if collection.title contains 'Quesadillas' or collection.title contains 'Pie' -%}
+        {%- assign show_third_threshold = true -%}
+        {%- break -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {%- if show_third_threshold -%}
+      {%- break -%}
+    {%- endif -%}
+  {%- endfor -%}
+
+  {%- comment %} Calculate progress for first tier {%- endcomment -%}
+  {%- assign progress_percentage_shipping = cart_total | times: 100 | divided_by: free_shipping_threshold -%}
+  
+
+  {%- if progress_percentage_shipping > 100 -%}
+    {%- assign progress_percentage_shipping = 100 -%}
+    
+  {%- endif -%}
+
+  {%- comment %} Calculate progress for second tier {%- endcomment -%}
+  {%- if cart_total >= free_shipping_threshold -%}
+    {%- assign amount_over_first_threshold = cart_total | minus: free_shipping_threshold -%}
+    {%- assign second_threshold_range = free_product_threshold_1_value | minus: free_shipping_threshold -%}
+    {%- assign progress_percentage_product1 = amount_over_first_threshold | times: 100 | divided_by: second_threshold_range -%}
+    {%- if progress_percentage_product1 > 100 -%}
+      {%- assign progress_percentage_product1 = 100 -%}
+    {%- endif -%}
+  {%- else -%}
+    {%- assign progress_percentage_product1 = 0 -%}
+  {%- endif -%}
+
+  {%- comment %} Calculate progress for third tier {%- endcomment -%}
+  {%- if show_third_threshold and cart_total >= free_product_threshold_1_value -%}
+    {%- assign amount_over_second_threshold = cart_total | minus: free_product_threshold_1_value -%}
+    {%- assign third_threshold_range = free_product_threshold_2_value | minus: free_product_threshold_1_value -%}
+    {%- assign progress_percentage_product2 = amount_over_second_threshold | times: 100 | divided_by: third_threshold_range -%}
+    {%- if progress_percentage_product2 > 100 -%}
+      {%- assign progress_percentage_product2 = 100 -%}
+    {%- endif -%}
+  {%- else -%}
+    {%- assign progress_percentage_product2 = 0 -%}
+  {%- endif -%}
+
+  <div class="threshold-message"  >
+    {% if cart_total < free_shipping_threshold %}
+      <span>Spend <span class="incentive-text">{{ (free_shipping_threshold | minus: cart_total) | money }}</span> more to unlock <span class="incentive-text">Free Shipping.</span></span>
+    {% elsif cart_total < free_product_threshold_1_value %}
+      <span>Spend <span class="incentive-text">{{ (free_product_threshold_1_value | minus: cart_total) | money }}</span> more to get <span class="incentive-text">{{ free_product_threshold_1_product.title }}</span> for free.</span>
+    {% elsif show_third_threshold and cart_total < free_product_threshold_2_value %}
+      <span>Spend <span class="incentive-text">{{ (free_product_threshold_2_value | minus: cart_total) | money }}</span> more to get <span class="incentive-text">{{ free_product_threshold_2_product.title }}</span> for free.</span>
+    {% else %}
+      <span>You've unlocked all available offers!</span>
+    {% endif %}
+  </div>
+
+  <div class="thresholds-container"  >
+    <div class="cart_tiers">
+      <!-- Free Shipping Tier -->
+      <div class="cart_tier">
+        <div class="cart_progress_line progress_line_1">
+          <div class="cart_progress_fill" style="width: {{ progress_percentage_shipping }}%;"></div>
+        </div>
+        {% if cart_total >= free_shipping_threshold %}
+          {% render 'incentive-icons', icon: 'check' %}
+        {% else %}
+          {% render 'incentive-icons', icon: 'medal' %}
+        {% endif %}
+        <h3>Free Shipping</h3>
+      </div>
+
+      <!-- First Free Product Tier -->
+      <div class="cart_tier">
+        <div class="cart_progress_line progress_line_2">
+          <div class="cart_progress_fill" style="width: {{ progress_percentage_product1 }}%;"></div>
+        </div>
+        {% if cart_total >= free_product_threshold_1_value %}
+          {% render 'incentive-icons', icon: 'check' %}
+        {% else %}
+          {% render 'incentive-icons', icon: 'medal' %}
+        {% endif %}
+        <h3>+ Free {{ free_product_threshold_1_product.title }}</h3>
+      </div>
+
+      <!-- Second Free Product Tier (if applicable) -->
+      {% if show_third_threshold %}
+        <div class="cart_tier">
+          <div class="cart_progress_line progress_line_3">
+            <div class="cart_progress_fill" style="width: {{ progress_percentage_product2 }}%;"></div>
+          </div>
+          {% if cart_total >= free_product_threshold_2_value %}
+            {% render 'incentive-icons', icon: 'check' %}
+          {% else %}
+            {% render 'incentive-icons', icon: 'medal' %}
+          {% endif %}
+          <h3>+ Free {{ free_product_threshold_2_product.title }}</h3>
+        </div>
+        <style>
+         .cart_tiers {
+            margin-left: 35px;
+         }
+        </style>
+
+      {% endif %}
+    </div>
+  </div>
+  <div id="threshold-data"
+     data-second-threshold-met="{% if cart_total >= free_product_threshold_1_value %}true{% else %}false{% endif %}"
+     data-third-threshold-met="{% if cart_total >= free_product_threshold_2_value %}true{% else %}false{% endif %}"
+     data-free-product-1-id="{{ free_product_threshold_1_product.variants.first.id }}"
+     data-free-product-2-id="{{ free_product_threshold_2_product.variants.first.id }}">
+</div>
+
+<!-- Include cart items in a script tag -->
+<script id="cart-data-script" type="application/json">
+  {{ cart.items | json }}
+</script>
+</div>
+
+{% comment %}
+First, check if any item in the cart has the property '_product_from_bundle' set to 'true'.
+{% endcomment %}
+{% assign bundle_product_in_cart = false %}
+{% for item in cart.items %}
+  {% if item.properties._product_from_bundle == 'true' %}
+    {% assign bundle_product_in_cart = true %}
+    {% break %}
+  {% endif %}
+{% endfor %}
+
+ 
+  {% assign all_quesadilla_subscription_products = true %}
+{% for item in cart.items %}
+  {%- assign has_product_from_bundle = false -%}
+  {% if item.properties._product_from_bundle == 'true' %}
+    {% assign has_product_from_bundle = true %}
+  {% endif %}
+
+  {%- assign in_quesadilla_collection = false -%}
+  {% for collection in item.product.collections %}
+    {% if collection.title contains 'Quesadillas' %}
+      {% assign in_quesadilla_collection = true %}
+      {% break %}
+    {% endif %}
+  {% endfor %}
+
+  {% if has_product_from_bundle or in_quesadilla_collection %}
+    {% unless item.selling_plan_allocation %}
+      {% assign all_quesadilla_subscription_products = false %}
+      {% break %}
+    {% endunless %}
+  {% endif %}
+{% endfor %}
+
+{% comment %}
+Initialize a variable to hold the HTML for the wrapped mobile items.
+{% endcomment %}
+{% assign wrapped_items_mobile = '' %}
+{% assign wrapped_items_total = 0 %}
+{%- assign subscription_total_price = 0 -%}
+{% comment %}
+Loop over each item in the cart to process eligible items only.
+{% endcomment %}
+ 
+{% for item in cart.items %}
+  {%- liquid
+    if item.variant.featured_media.preview_image
+      assign preview_image = item.variant.featured_media.preview_image
+    elsif item.product.featured_media.preview_image
+      assign preview_image = item.product.featured_media.preview_image
+    else
+      assign preview_image = false
+    endif
+  -%}
+
+  {%- assign has_product_from_bundle = false -%}
+  {% if item.properties._product_from_bundle == 'true' %}
+    {% assign has_product_from_bundle = true %}
+  {% endif %}
+
+  {%- assign in_quesadilla_collection = false -%}
+  {% for collection in item.product.collections %}
+    {% if collection.title contains 'Quesadillas' %}
+      {% assign in_quesadilla_collection = true %}
+      {% break %}
+    {% endif %}
+  {% endfor %}
+
+ 
+
+  {% comment %}
+  Include the item only if it meets the conditions and bundle_product_in_cart is true.
+  {% endcomment %}
+  
+  {% if bundle_product_in_cart %}
+    {% if has_product_from_bundle or in_quesadilla_collection %}
+    {% assign wrapped_items_total = wrapped_items_total | plus: item.final_line_price %}
+    
+     {%- if item.selling_plan_allocation -%}
+        {%- assign item_subscription_price = item.selling_plan_allocation.price | times: item.quantity -%}
+        {%- assign subscription_total_price = subscription_total_price | plus: item_subscription_price -%}
+        {%- assign item_one_time_price = item.selling_plan_allocation.compare_at_price | times: item.quantity -%}
+        {%- assign one_time_total_price = one_time_total_price | plus: item_one_time_price -%}
+    {%- else -%}
+        {%- assign subscription_price = item.final_price | minus: item.product.selling_plan_groups[0].selling_plans[0].price_adjustments[0].value -%}
+        {%- assign item_subscription_price = subscription_price | times: item.quantity -%}
+        {%- assign subscription_total_price = subscription_total_price | plus: item_subscription_price -%}
+        {%- assign item_one_time_price = item.final_price | times: item.quantity -%}
+        {%- assign one_time_total_price = one_time_total_price | plus: item_one_time_price -%}
+    {%- endif -%}
+  
+      {% capture mobile_items %}
+        <div
+          class="cart--item"
+          data-variant-id="{{ item.variant_id }}"
+          data-quantity="{{ item.quantity }}"
+          data-inventory-management="{{ item.variant.inventory_management }}"
+          data-inventory-quantity="{{ item.variant.inventory_quantity | default: 0 }}"
+          data-line-num="{{ forloop.index }}"
+          data-line-key="{{ item.key }}"
+          {% for selling_plan in item.product.selling_plan_groups[0].selling_plans %}
+            {{ selling_plan.name | handleize }}="{{ selling_plan.id }}"
+          {% endfor %}
+          {% if item.selling_plan_allocation %}
+          data-current-subscription="true"
+          {% else %}
+          data-current-subscription="false"
+          {% endif %}
+     
+
+
+          
+        >
+         
+
+          <div class="cart--item--image">
+            <a href="{{ item.url }}" aria-label="{{ item.product.title }}">
+              {%- liquid
+                if preview_image != false
+                  render "image", image: preview_image
+                else
+                  render "placeholder", type: 'image', aspect_ratio: 1
+                endif
+              -%}
+            </a>
+          </div>
+
+          <div class="cart--item--info">
+           <div class="cart--item--title bundle-item-name">
+            <div class="text-left-bundle" data-item="block-heading">
+              <a href="{{ item.url }}">{{ item.product.title }}</a>
+            </div>
+
+            <div class='cart--error' data-item='small-text' style='display:none;'>
+              {{ all_items_added_t }}
+            </div>
+          </div>
+            {% unless item.variant.title contains 'Default' %}
+              <div class="cart--item--variant-name" data-item="accent-text">
+                <a href="{{ item.url }}">{{ item.variant.title }}</a>
+              </div>
+            {% endunless %}
+
+            {% if item.selling_plan_allocation %}
+              <div class="cart--item--selling-plan" data-item="small-text">
+                {{ item.selling_plan_allocation.selling_plan.name }}
+              </div>
+            {% endif %}
+
+            {% assign property_size = item.properties | size %}
+            {% if property_size > 0 %}
+              <div class="cart--item-properties">
+              {% for property in item.properties %}
+                {% unless property.last == blank %}
+                  <br>
+                  {{ property.first }}:
+                  {% comment %} Check if there was an uploaded file associated {% endcomment %}
+                  {% if property.last contains '/uploads/' %}
+                    <a href="{{ property.last }}">{{ property.last | split: '/' | last }}</a>
+                  {% else %}
+                    {{ property.last }}
+                  {% endif %}
+                {% endunless %}
+              {% endfor %}
+              </div>
+            {% endif %}
+
+            <div class="cart--item--price">
+              {% if item.original_price > item.final_price %}
+                <div class="cart--item--orig-price" data-item="light-accent-text">
+                  <s class="money">{{ item.original_price | money }}</s>
+                </div>
+              {% endif %}
+
+              <div class="cart--item--total money" data-item="accent-text">
+                {{ item.final_price | money }}
+              </div>
+
+              <div class="cart--item--unit-price-container" data-item="small-text">
+                {%- liquid
+                  if item.unit_price_measurement
+                    echo item.unit_price | money | append: '/'
+                    if item.unit_price_measurement.reference_value != 1
+                      echo item.unit_price_measurement.reference_value
+                    endif
+                    echo item.unit_price_measurement.reference_unit
+                  endif
+                -%}
+              </div>
+
+              {% if item.line_level_discount_allocations.size > 0 %}
+                <div class="cart--item--discounts" data-item="light-accent-text">
+                  {% for discount_allocation in item.line_level_discount_allocations %}
+                    {{ discount_allocation.discount_application.title }}&nbsp;
+                    (–<span class="money">{{ discount_allocation.amount | money }}</span>)
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="cart--item--quantity">
+              <div class="cart--quantity--container" data-item="input">
+                <a
+                  class="cart--minus custom-minus"
+                  data-item="minus"
+                  tabindex="0"
+                  aria-label="{{ minus_t }}"
+                >
+                  {% render 'icons', icon: 'minus' %}
+                </a>
+                <label for="{{ cart_id }}-updates-{{ item.key }}" data-item="hidden-text">
+                  {{ quantity_t }}
+                </label>
+                <input
+                  class="cart--quantity--input"
+                  id="{{ cart_id }}-updates-{{ item.key }}"
+                  type="text"
+                  name="updates[]"
+                  value="{{ item.quantity }}"
+                  min="1"
+                  pattern="[0-9]*"
+                  tabindex='-1'
+                  data-loading="false"
+                />
+                <a
+                  class="cart--plus custom-plus"
+                  data-item="plus"
+                  tabindex="0"
+                  aria-label="{{ plus_t }}"
+                >
+                  {% render 'icons', icon: 'plus' %}
+                </a>
+              </div>
+
+              <div class="cart--item--remove" data-item='block-link'>
+                <a
+                  href="{{ routes.cart_change_url }}?line={{ forloop.index }}&quantity=0"
+                  class="remove"
+                  aria-label="{{ remove_t }}"
+                  title="{{ remove_t }}"
+                >
+                  {{ remove_t }}
+                </a>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      {% endcapture %}
+
+      {% comment %}
+      Append the captured item to the wrapped items variable.
+      {% endcomment %}
+      {% assign wrapped_items_mobile = wrapped_items_mobile | append: mobile_items %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+
+{% comment %}
+Finally, output the wrapped items if any.
+{% endcomment %}
+
+ 
+{% if wrapped_items_mobile != '' %}
+  <div class="wrapped-items-mobile">
+   <div class="bundles-wrapper-header">
+    <h3 class="bundle-header-title">Your Quesadilla Bundle</h3>
+    <p class="bundle-header-price">{{ wrapped_items_total | money }}</p>
+   {% if all_quesadilla_subscription_products  %}
+   {% else %}
+   <div class="subscription_base ">
+          <div class="btn_price">
+            <div class="btn_text">
+              <div class="btn_wrapper">
+                <div class="subscribe_btn"></div>
+              </div>
+              <div class="subscribe_text">
+                <p class="text_part">
+                  Upgrade to Subscribe & Save <span class="save_percent">10%</span>
+                </p>
+               
+              </div>
+            </div>
+            <div class="price_part">
+               
+              <span class="total_price">
+                {{ subscription_total_price | money }}
+              </span>
+            </div>
+          </div>
+
+          <div class="delivery_frequency">
+            <p class="label">
+              Delivery Every
+            </p>
+            <div class="frequency_wrapper">
+              <select class="select_frequency">
+                <option value="every-other-month">Every Other Month</option>
+                <option value="monthly">Monthly</option>
+                <option value="weekly">Weekly</option>
+              </select>
+              <span class="down_arrow">
+                {% render 'arrow-icon' %}
+              </span>
+            </div>
+          </div>
+
+        </div>
+   </div>
+   {% endif %}
+   
+    {{ wrapped_items_mobile }}
+  </div>
+{% endif %}

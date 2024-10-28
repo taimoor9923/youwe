@@ -1,0 +1,565 @@
+ 
+ <link rel="stylesheet" href="{{ 'component-pagination.css' | asset_url }}" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="{{ 'quick-order.css' | asset_url }}" media="print" onload="this.media='all'">
+
+{% assign sizes = 'XXS,XS,S,M,L,XL,XXL,3XL,4XL,Default Title' | split: ',' %}
+<div class="d-flex justify-content-between order-info-header">
+    <h1>Quick Order</h1>
+    <div class="stock-color-info d-flex">
+        <div class="in-stock"></div><span>In Stock</span>
+        <div class="limited-stock"></div><span>Limited Stock</span>
+        <div class="out-of-stock"></div><span>Out Of Stock</span>
+    </div>
+</div>
+
+<!-- Table 2: Selected Products -->
+<div class="d-flex justify-content-between flex-end">
+     <button id="clearAll" onclick="clearAllProducts()">Clear All</button>
+</div>
+<table id="selectedProducts">
+    <thead>
+        <tr>
+            <th>Code</th>
+            <th style="width: 20%;">Product</th>
+            <!-- Render the same size columns in the second table -->
+            {% for size in sizes %}
+                <th>  {% if size == 'Default Title' %}
+                    One Size
+                      {% else %}      
+                      {{ size }}
+                    {% endif %}</th>
+            {% endfor %}
+            <th>Subtotal</th>
+        </tr>
+    </thead>
+    <tbody>
+        <!-- Populated by JavaScript -->
+    </tbody>
+</table>
+
+<!-- Footer with Add to Cart button and Total -->
+<div class="selected-products-footer" >
+    <div class="total">
+        <div class="total-wrapper">
+            <div class="total-quantity-wrapper">
+                <span class="total-text">Total Quantity: </span>
+                <span id="totalQuantity">0</span>
+            </div>
+            <div class="total-amount-wrapper">
+                <span class="total-text">Total: </span>
+                <!-- TODO: MAKE CURRENCY DYNAMIC -->
+
+                <span id="totalAmount">£0.00</span>
+            </div>
+        </div>
+        {% if customer and customer.b2b? %}
+        <button id="addToCart"  onclick="addToCart()">Add to Cart</button>
+        {% else %}
+        <a class="login-to-add-to-cart" href="/account/login?return_url=/pages/quickorder">Login to Add to Cart</a>
+         {% endif %}
+    </div>
+</div>
+
+ 
+<!-- Clear All & Add to Cart -->
+{% comment %} <button id="clearAll" onclick="clearAllProducts()">Clear All</button>
+<button id="addToCart" onclick="addToCart()">Add to Cart</button> {% endcomment %}
+  <!-- Search Bar -->
+  <input type="text" id="search" placeholder="Search all products..." oninput="debouncedSearch()">
+
+  <!-- Table 1: Product Listing -->
+  {% paginate collections.all.products by 25 %}
+  <table id="productTable">
+      <thead>
+          <tr>
+              <th class="sort" style="width: 8%;">Code</th>
+              <th class="sort product-header" style="width: 20%;">Product</th>
+              
+              <!-- Dynamically Render Size Columns -->
+              {% for size in  sizes %}
+                  <th class="text-right" style="font-size: 10px;">
+                  {% if size == 'Default Title' %}
+                  One Size
+                    {% else %}      
+                    {{ size }}
+                  {% endif %}
+                </th>
+              {% endfor %}
+              
+             
+               
+          </tr>
+      </thead>
+      <tbody>
+        
+              {% for product in collections.all.products %}
+                  <tr data-product-id="{{ product.id }}">
+                       {% assign productSku = product.variants[0].sku | split: '-' %}
+                      <td>{{ productSku[0] }}</td> 
+                      <td class="order-flex"><span class="max-width-quick-image"><img  src="{{ product.featured_image | image_url:width:500 }}" alt="{{ product.title }}"  ></span> <span class="text-left">{{ product.title }}</span></td>
+                      
+                    <!-- Render each size's variant data -->
+                        {% for size in sizes %}
+                            {% assign variant_found = false %}
+                            {% for variant in product.variants %}
+                                {% assign print_variant = 'Screen / '  | append: size %}
+                                {% if variant.title == size or variant.title == print_variant %}
+                                    <td data-variant-id="{{ variant.id }}" data-box-quantity="{{variant.metafields.custom.box_qty.value }}" data-variant-price="{{ variant.price }}" class="{% if variant.inventory_quantity > 20 %}green-border{% elsif variant.inventory_quantity > 0 %}yellow-border{% else %}red-border{% endif %}">
+                                       {{ variant.price | money }}
+                                    </td>
+                                    {% assign variant_found = true %}
+                                {% endif %}
+                            {% endfor %}
+                            {% unless variant_found %}
+                                <td></td>
+                            {% endunless %}
+                        {% endfor %}
+                      
+                     
+                  </tr>
+              {% endfor %}
+        
+      </tbody>
+  </table>
+  {%- if paginate.pages > 1 -%}
+    
+    {% render 'pagination-quick-order', paginate: paginate, anchor: '' %}
+     
+  {%- endif -%}
+  {% endpaginate %}
+   
+  
+
+<script>
+        
+    
+        
+        fetch(`/collections/all?view=quickorder`)
+        .then(response => response.text())
+        .then(html => {
+
+             renderProducts(html);
+
+        })
+        .catch(error => console.error('Error fetching search results:', error));
+
+        let selectedProducts = {}; // Object to hold the selected products and their quantities
+        let debounceTimeout;
+        let removedRows = []; // New array to store removed rows
+
+    // Debounce function: It will wait for the specified delay before calling the searchProducts function
+    function debounce(func, delay) {
+        return function(...args) {
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(() => {
+                func.apply(this, args);
+            }, delay);
+        };
+    }
+    
+        
+       function searchProducts() {
+        let query = document.getElementById('search').value;
+    
+        // Check if query is long enough
+         
+    
+        if(query == ''){
+            fetch(`/collections/all?view=quickorder`)
+            .then(response => response.text())
+            .then(html => {
+    
+                 renderProducts(html);
+    
+            })
+            .catch(error => console.error('Error fetching search results:', error));
+        
+        } else {
+            fetch(`/search?q=${query}&view=ajax`)
+            .then(response => response.text())
+            .then(html => {
+    
+    
+               renderProducts(html);
+    
+    
+            })
+            .catch(error => console.error('Error fetching search results:', error));
+        }
+       
+    }
+    
+    const debouncedSearch = debounce(searchProducts, 300);
+    
+        
+       
+        
+        
+        function renderProducts(html) {
+            // Render the products in the table
+              // Create a temporary DOM element to hold the response HTML
+              let tempDiv = document.createElement('div');
+              tempDiv.innerHTML = html;
+              console.log(tempDiv);
+              // Extract the inner HTML from the div with id 'searchResult'
+              let searchResult = tempDiv.querySelector('tbody').innerHTML ? tempDiv.querySelector('tbody').innerHTML :'';
+              let pagination = tempDiv.querySelector('.pagination-wrapper') ? tempDiv.querySelector('.pagination-wrapper').innerHTML : '';
+    
+              // Inject the searchResult data into the productTable's tbody
+              document.getElementById('productTable').getElementsByTagName('tbody')[0].innerHTML ='';
+              document.querySelector('.pagination-wrapper').innerHTML = '';
+              document.getElementById('productTable').getElementsByTagName('tbody')[0].innerHTML = searchResult;
+              document.querySelector('.pagination-wrapper').innerHTML = pagination;
+              setupPaginationEventListeners();
+              attachProductRowClickListeners();
+
+        }
+    
+    
+        function setupPaginationEventListeners() {
+            // Select all pagination links
+            console.log('setupPaginationEventListeners');
+            const paginationLinks = document.querySelectorAll('.pagination__item.link');
+              
+
+            // Loop through each pagination link and add a click event listener
+            paginationLinks.forEach(link => {
+                link.addEventListener('click', function(event) {
+                    // Prevent the default link behavior (no page reload)
+                    event.preventDefault();
+                    window.scrollTo(0, 0);
+                    // Get the URL from the href attribute of the clicked link
+                    const url = event.currentTarget.getAttribute('href');
+        
+                    // Fetch the content using AJAX
+                    fetch(url)
+                        .then(response => response.text())
+                        .then(html => {
+                            renderProducts(html);
+         
+                            
+                        })
+                        .catch(error => console.error('Error fetching paginated content:', error));
+                });
+            });
+        }
+        setupPaginationEventListeners();
+
+         
+      
+
+      
+    
+        // Call updateTotal whenever a subtotal is updated
+        document.querySelectorAll('#selectedProducts .quantity-input').forEach(input => {
+            input.addEventListener('input', updateTotal);
+        });
+        
+        // Function to clear all products from the selected table (t2)
+        function clearAllProducts() {
+             let selectedTable = document.getElementById('selectedProducts').getElementsByTagName('tbody')[0];
+
+    // For each row in #selectedProducts, get the productId
+    let rows = Array.from(selectedTable.getElementsByTagName('tr'));
+
+    // For each row, find the corresponding original row from removedRows
+    rows.forEach(row => {
+        let productId = row.dataset.productId;
+        let removedRowEntry = removedRows.find(entry => entry.productId === productId);
+
+        if (removedRowEntry) {
+            let productTableBody = document.getElementById('productTable').getElementsByTagName('tbody')[0];
+
+            // Insert the original row back into the table at the correct index
+            if (removedRowEntry.rowIndex >= productTableBody.children.length) {
+                // If the index is beyond the length, just append
+                productTableBody.appendChild(removedRowEntry.row);
+            } else {
+                productTableBody.insertBefore(removedRowEntry.row, productTableBody.children[removedRowEntry.rowIndex]);
+            }
+
+            // Remove the entry from removedRows
+            removedRows = removedRows.filter(entry => entry.productId !== productId);
+        }
+    });
+
+    // Clear the selectedProducts table
+    selectedTable.innerHTML = '';
+
+    // Reset the selectedProducts object
+    selectedProducts = {};
+
+    // Clear the total quantity and total amount
+    document.getElementById('totalQuantity').innerText = '0';
+    document.getElementById('totalAmount').innerText = '£0.00';
+
+    // Re-attach the click event listener to the restored rows
+    attachProductRowClickListeners();
+        }
+        
+        // Function to add all selected products to the Shopify cart
+        function addToCart() {
+            let cartItems = [];
+        
+            // Loop through all selected products
+            document.querySelectorAll('#selectedProducts tbody tr').forEach(row => {
+                let productId = row.dataset.productId;
+                let productData = selectedProducts[productId] || { quantities: {} };
+        
+                // For each selected product, loop through its selected variants and quantities
+                row.querySelectorAll('td[data-variant-id]').forEach(cell => {
+                    let variantId = cell.dataset.variantId;
+                    let boxQuantity = cell.dataset.boxQuantity;
+                    let quantity = parseInt(cell.querySelector('.quantity').value) || 0;
+        
+                    if (quantity > 0) {
+                        cartItems.push({
+                            id: variantId,
+                            quantity: quantity,
+                            properties: {
+                                _box_quantity: boxQuantity
+                            }
+                        });
+                        productData.quantities[variantId] = quantity;
+                    }
+                });
+        
+                selectedProducts[productId] = productData;
+            });
+        
+            // Send the cart items to Shopify's cart API
+            fetch('/cart/add.js', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ items: cartItems })
+            }).then(response => {
+                if (response.ok) {
+                  
+                    window.location.href = '/cart';
+                } else {
+                    response.json().then(data => {
+                        alert('Error adding products to cart: ' + data.message);
+                    });
+                }
+            }).catch(error => {
+                alert('Error adding products to cart: ' + error.message);
+            });
+        }
+        
+
+        function handleProductRowClick(event) {
+            let productId = event.currentTarget.dataset.productId;
+             let originalRow = event.currentTarget;
+             let rowIndex = Array.from(originalRow.parentNode.children).indexOf(originalRow);
+              removedRows.push({
+                productId: productId,
+                row: originalRow,
+                rowIndex: rowIndex
+            });
+            let productRow = originalRow.cloneNode(true);
+
+            event.currentTarget.remove();
+            
+            // Add a subtotal cell to the cloned row
+            let subtotalCell = document.createElement('td');
+            subtotalCell.classList.add('subtotal-cell');
+             // todo: make currency dynamic
+            subtotalCell.textContent = '£0.00';
+            productRow.appendChild(subtotalCell);
+            
+            // Replace price cells with quantity selectors and copy buttons
+            let priceCells = productRow.querySelectorAll('td[data-variant-id]');
+            priceCells.forEach((cell) => {
+                cell.classList.add('variant', 'text-right', 'warning','p-relative');
+                
+                let quantityInput = document.createElement('input');
+                quantityInput.classList.add('quantity', 'form-control');
+                quantityInput.type = 'number';
+                quantityInput.min = '0';
+                quantityInput.value = '0';
+                
+                let quantityDiv = document.createElement('div');
+                quantityDiv.appendChild(quantityInput);
+                
+                cell.innerHTML = '';
+                cell.appendChild(quantityDiv);
+                
+                let upButton = document.createElement('div');
+                upButton.classList.add('copy-btn', 'up');
+                upButton.style.display = 'none';
+                upButton.innerHTML = '<i class="fa fa-caret-up fa-xl" data-direction="up"></i>';
+                
+                let leftButton = document.createElement('div');
+                leftButton.classList.add('copy-btn', 'left');
+                leftButton.style.display = 'none';
+                leftButton.innerHTML = '<i class="fa fa-caret-left fa-xl" data-direction="left"></i>';
+                
+                let rightButton = document.createElement('div');
+                rightButton.classList.add('copy-btn', 'right');
+                rightButton.style.display = 'none';
+                rightButton.innerHTML = '<i class="fa fa-caret-right fa-xl" data-direction="right"></i>';
+                
+                let downButton = document.createElement('div');
+                downButton.classList.add('copy-btn', 'down');
+                downButton.style.display = 'none';
+                downButton.innerHTML = '<i class="fa fa-caret-down fa-xl" data-direction="down"></i>';
+                
+                cell.appendChild(upButton);
+                cell.appendChild(leftButton);
+                cell.appendChild(rightButton);
+                cell.appendChild(downButton);
+                
+                quantityInput.addEventListener('focus', () => {
+                    // Hide all other buttons
+                    document.querySelectorAll('.copy-btn').forEach(button => {
+                        button.style.display = 'none';
+                    });
+
+                    // Show buttons for the currently focused cell
+                    upButton.style.display = 'block';
+                    leftButton.style.display = 'block';
+                    rightButton.style.display = 'block';
+                    downButton.style.display = 'block';
+                });
+                
+               
+
+                // Function to update subtotal
+                function updateSubtotal() {
+                    let subtotalCell = productRow.querySelector('.subtotal-cell');
+                    let subtotal = 0;
+                    priceCells.forEach((cell) => {
+                        let quantity = cell.querySelector('.quantity').value;
+                        let price = cell.dataset.variantPrice;
+                        subtotal += quantity * price;
+                    });
+                    subtotalCell.textContent = `£${(subtotal / 100).toFixed(2)}`;
+                }
+                function updateTotal() {
+                    let total = 0;
+                    document.querySelectorAll('#selectedProducts .subtotal-cell').forEach(cell => {
+                        let subtotal = parseFloat(cell.textContent.replace('£', '')) || 0;
+                        total += subtotal;
+                    });
+                    document.getElementById('totalAmount').textContent = `£${total.toFixed(2)}`;
+                }
+                function updateTotalQuantity() {
+                    let totalQuantity = 0;
+                    document.querySelectorAll('#selectedProducts .quantity').forEach(cell => {
+                        let quantity = parseInt(cell.value) || 0;
+                        totalQuantity += quantity;
+                    });
+                    document.getElementById('totalQuantity').textContent = totalQuantity;
+                }
+
+                // Add event listeners for copy buttons
+                upButton.addEventListener('click', () => {
+                    let currentRow = cell.parentElement;
+                    let cellIndex = Array.from(currentRow.children).indexOf(cell);
+                    while (currentRow.previousElementSibling) {
+                        currentRow = currentRow.previousElementSibling;
+                        let cellAbove = currentRow.children[cellIndex].querySelector('.quantity');
+                        if (cellAbove && window.getComputedStyle(cellAbove).pointerEvents !== 'none') {
+                            cellAbove.value = quantityInput.value;
+                            cellAbove.dispatchEvent(new Event('input'));
+                        }
+                    }
+                    updateSubtotal();
+                    updateTotal();
+                    updateTotalQuantity();
+                });
+
+                downButton.addEventListener('click', () => {
+                    let currentRow = cell.parentElement;
+                    let cellIndex = Array.from(currentRow.children).indexOf(cell);
+                    while (currentRow.nextElementSibling) {
+                        currentRow = currentRow.nextElementSibling;
+                        let cellBelow = currentRow.children[cellIndex].querySelector('.quantity');
+                        if (cellBelow && window.getComputedStyle(cellBelow).pointerEvents !== 'none') {
+                            cellBelow.value = quantityInput.value;
+                            cellBelow.dispatchEvent(new Event('input'));
+                        }
+                    }
+                    updateSubtotal();
+                    updateTotal();
+                    updateTotalQuantity();
+
+                });
+
+                leftButton.addEventListener('click', () => {
+                    let currentCell = cell;
+                    while (currentCell.previousElementSibling) {
+                        currentCell = currentCell.previousElementSibling;
+                        let inputLeft = currentCell.querySelector('.quantity');
+                        if (inputLeft && window.getComputedStyle(inputLeft).pointerEvents !== 'none') {
+                            inputLeft.value = quantityInput.value;
+                        }
+                    }
+                    updateSubtotal();
+                    updateTotal();
+                    updateTotalQuantity();
+                });
+
+                rightButton.addEventListener('click', () => {
+                    console.log('rightButton'); 
+                     let currentCell = cell;
+                    while (currentCell.nextElementSibling) {
+                    
+
+                        currentCell = currentCell.nextElementSibling;
+                        let inputRight = currentCell.querySelector('.quantity');
+                        if (inputRight && window.getComputedStyle(inputRight).pointerEvents !== 'none') {
+                            inputRight.value = quantityInput.value;
+                        }
+                    }
+                    updateSubtotal();
+                    updateTotal();
+                    updateTotalQuantity();
+                });
+
+                quantityInput.addEventListener('input', () => {
+                    updateSubtotal();
+                    updateTotal();
+                    updateTotalQuantity();
+                });
+            });
+            
+            // Append the cloned row to the selectedProducts table
+            document.getElementById('selectedProducts').getElementsByTagName('tbody')[0].appendChild(productRow);
+        }
+
+        // Attach event listeners to product rows
+        function attachProductRowClickListeners() {
+            let productRows = document.querySelectorAll('#productTable tbody tr');
+            productRows.forEach(row => {
+                row.addEventListener('click', handleProductRowClick);
+            });
+        }
+
+        // Call the function to attach event listeners to product rows
+        attachProductRowClickListeners(); 
+
+          
+
+     
+  
+   
+    
+</script>
+{% schema %}
+{
+  "name": "Quick Order Main",
+  "tag": "section",
+  "class": "spaced-section",
+  "settings": [
+    
+  ],
+  "presets": [
+    {
+      "name": "Quick Order Form"
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,51 @@
+<section class="browse-similar-products page-width" id="browse-similar-products" data-product-sku="{{ product.variants.first.sku | split: '-' | first }}" data-product-title="{{ product.title | escape }}" data-title="{{ section.settings.heading }}"> 
+    <div class="browse-similar-products__content"></div>
+</section>
+
+<script>
+  {
+    // Create and append elements to the document body with given attributes
+    const addElement = (tag, attributes, async = false) => {
+      const element = document.createElement(tag);
+      for (const [key, value] of Object.entries(attributes)) {
+        element[key] = value;
+      }
+      if (async) {
+        element.async = true;
+      }
+      document.body.appendChild(element);
+    }
+
+    // Create a new IntersectionObserver to handle the intersection of the target element
+    const mcObserver = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (entry.isIntersecting) {
+        addElement("link", { rel: "stylesheet", href: "{{ 'splide.min.css' | asset_url }}" });
+        addElement("link", { rel: "stylesheet", href: "{{ 'browse-similar-products.css' | asset_url }}" });
+        addElement("script", { src: "{{ 'splide.min.js' | asset_url }}" }, true);
+        addElement("script", { src: "{{ 'browse-similar-products.js' | asset_url }}" }, true);
+        mcObserver.unobserve(entry.target);
+      }
+    });
+
+    // Get the browse-similar-products container element and start observing the browseSimilarContainer for intersection
+    const browseSimilarContainer = document.getElementById("browse-similar-products");
+    mcObserver.observe(browseSimilarContainer);
+  }
+</script>
+
+
+{% schema %}
+  {
+    "name": "Browse Similar Products",
+    "tag": "section",
+    "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "default": "Explore Similar Spiral Products",
+          "label": "Heading"
+        }
+	]
+  }
+{% endschema %}
